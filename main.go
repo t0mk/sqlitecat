@@ -2,53 +2,82 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
-	"database/sql"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm/logger"
 
 	_ "github.com/mattn/go-sqlite3"
+	"gorm.io/gorm"
 )
 
-var (
-	db        *sql.DB
-	separator = " | "
-)
+var ()
+
+func OpenDB(dbfile string) (*gorm.DB, error) {
+	db, err := gorm.Open(sqlite.Open(dbfile), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
 
 func main() {
 	fileName := os.Args[1]
-	var err error
-	db, err = sql.Open("sqlite3", fileName)
-	if err != nil {
-		log.Fatal(err)
-	}
-	q := fmt.Sprintf("SELECT * FROM %s", os.Args[2])
-	rows, err := db.Query(q)
+	db, err := OpenDB(fileName)
 	if err != nil {
 		panic(err)
 	}
-	defer rows.Close()
-	cols, err := rows.Columns()
+	tabs, err := db.Migrator().GetTables()
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Println(strings.ToUpper(strings.Join(cols, separator)))
-
-	for rows.Next() {
-		data := []string{}
-		columns := make([]string, len(cols))
-		columnPointers := make([]interface{}, len(cols))
-		for i := range columns {
-			columnPointers[i] = &columns[i]
-		}
-
-		rows.Scan(columnPointers...)
-
-		for i := range cols {
-			data = append(data, columns[i])
-		}
-		fmt.Println(strings.Join(data, separator))
+	tab := tabs[0]
+	if len(tabs) > 1 {
+		fmt.Println("More than 1 tab, using arg[2]")
+		tab = os.Args[2]
 	}
+
+	cts, err := db.Migrator().ColumnTypes(tab)
+	if err != nil {
+		panic(err)
+	}
+	typs := []string{}
+	ctypesmap := map[string]string{}
+	for _, ct := range cts {
+		typs = append(typs, ct.Name())
+		cty, _ := ct.ColumnType()
+		ctypesmap[ct.Name()] = cty
+	}
+	sep := os.Getenv("SEP")
+	if sep == "" {
+		sep = " | "
+	}
+	uq := os.Getenv("QUERY")
+	q := fmt.Sprintf("select * from %s", tab)
+	if uq != "" {
+		q = fmt.Sprintf("select * from %s where %s", tab, uq)
+	}
+
+	var result []map[string]interface{}
+
+	tx := db.Raw(q).Scan(&result)
+	if tx.Error != nil {
+		fmt.Println(tx.Error)
+		return
+	}
+	colstring := strings.Join(typs, sep)
+	fmt.Println(colstring)
+	for _, v := range result {
+		for j, c := range typs {
+			fmt.Printf("%v", v[c])
+			if j < (len(typs) - 1) {
+				fmt.Printf("%s", sep)
+			}
+		}
+		fmt.Println()
+	}
+	fmt.Println(colstring)
 }
