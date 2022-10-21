@@ -17,6 +17,6 @@ $ SEP=", " QUERY="size != 0" sqlitecat all.db
 
 ## Envvars
 
-Set envvar `QUERY` for "where" expressions. `QUERY="size > 100" ./sqlitecat` will only print records mathcing query "SELECT * FROM <TABLENAME> WHERE size > 100".
+Set envvar `QUERY` for "where" expressions. `QUERY="size > 100" ./sqlitecat` will only print records mathcing query "SELECT * FROM TABLENAME WHERE size > 100".
 
 Set envvar `SEP` if you want row values separated by sth else than `" | "`. 
